@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from base_imp import MLP
+from base_imp import MLP, convert_args_to_tensor
 
 class MLPPolicy(nn.Module):
 
@@ -15,6 +15,7 @@ class MLPPolicy(nn.Module):
         training=True,
         discrete=False, # unused for now
         nn_baseline=False, # unused for now
+        learning_rate = 1e-4,
         **kwargs):
         super().__init__()
 
@@ -36,7 +37,7 @@ class MLPPolicy(nn.Module):
         #loss and optimizer
         if self.training:
             # TODO define the loss that will be used to train this policy
-            self.loss_func = TODO
+            self.loss_func = torch.nn.MSELoss(reduction='mean')
             self.optimizer = torch.optim.Adam(self.parameters(), lr)
 
         self.to(device)
@@ -61,6 +62,8 @@ class MLPPolicy(nn.Module):
 
     ##################################
 
+    ##################################
+
     def forward(self, x):
         for layer in self.mlp:
             x = layer(x)
@@ -79,13 +82,14 @@ class MLPPolicy(nn.Module):
     # query this policy with observation(s) to get selected action(s)
     @convert_args_to_tensor()
     def get_action(self, obs):
-        if len(obs.shape)>1:
-            observation = obs
-        else:
-            observation = obs[None]
+        with torch.no_grad():
+            if len(obs.shape)>1:
+                observation = obs
+            else:
+                observation = obs[None]
 
         # TODO return the action that the policy prescribes
-        return TODO
+        return self._build_action_sampling(observation).cpu().numpy()
 
     # update/train this policy
     def update(self, observations, actions):
@@ -107,13 +111,10 @@ class MLPPolicySL(MLPPolicy):
 
         # TODO define network update
         # HINT - you need to calculate the prediction loss and then use optimizer.step()
+        actions, observations = actions.to(self.device), observations.to(self.device)
+        sample_ac = self._build_action_sampling(observations)
+        loss = self.loss_func(actions, sample_ac)
 
-
-
-
-
-
-
-
-
-
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
